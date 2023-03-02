@@ -12,7 +12,9 @@ package github_flavored_markdown
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strings"
@@ -29,6 +31,36 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
+
+//go:embed template/*
+var fs embed.FS
+
+func Html(r io.Reader) ([]byte, error) {
+	tmpl, err := template.ParseFS(fs, "template/template.html")
+	if err != nil {
+		return nil, fmt.Errorf("fail to parse template: %w", err)
+	}
+	css, err := fs.ReadFile("template/gfm.css")
+	if err != nil {
+		return nil, fmt.Errorf("fail to open css: %w", err)
+	}
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("fail to open input stream: %w", err)
+	}
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, struct {
+		Style string
+		Body  string
+	}{
+		string(css),
+		string(Markdown(b)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fail to render html: %w", err)
+	}
+	return buf.Bytes(), nil
+}
 
 // Markdown renders GitHub Flavored Markdown text.
 func Markdown(text []byte) []byte {
